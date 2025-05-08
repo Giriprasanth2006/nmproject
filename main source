@@ -1,0 +1,93 @@
+# 1. Import Required Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.ensemble import RandomForestRegressor
+import xgboost as xgb
+import lightgbm as lgb
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+
+# 2. Load Dataset
+df = pd.read_csv('AirQualityUCI.csv', sep=';', decimal=',')
+df = df.dropna(how='all', axis=1).dropna(how='any')  # Clean empty columns/rows
+df = df.iloc[:, :15]  # Select relevant features
+df = df.apply(pd.to_numeric, errors='coerce').dropna()
+
+# 3. Feature Engineering
+df['DateTime'] = pd.to_datetime(df['Date'] + ' ' + df['Time'], errors='coerce')
+df = df.drop(['Date', 'Time'], axis=1)
+df = df.dropna()
+df = df.set_index('DateTime')
+
+# 4. Visualize Data
+plt.figure(figsize=(10, 6))
+sns.heatmap(df.corr(), annot=True, cmap='coolwarm')
+plt.title('Feature Correlation Heatmap')
+plt.show()
+
+# 5. Define Features and Target
+X = df.drop(['CO(GT)'], axis=1)  # Predicting CO levels
+y = df['CO(GT)']
+
+# 6. Split Data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 7. Scale Features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# 8. Train Models
+
+## Random Forest
+rf = RandomForestRegressor()
+rf.fit(X_train_scaled, y_train)
+rf_preds = rf.predict(X_test_scaled)
+
+## XGBoost
+xg_reg = xgb.XGBRegressor()
+xg_reg.fit(X_train_scaled, y_train)
+xgb_preds = xg_reg.predict(X_test_scaled)
+
+## LightGBM
+lgb_reg = lgb.LGBMRegressor()
+lgb_reg.fit(X_train_scaled, y_train)
+lgb_preds = lgb_reg.predict(X_test_scaled)
+
+## Neural Network (Keras)
+nn_model = Sequential()
+nn_model.add(Dense(128, input_dim=X_train_scaled.shape[1], activation='relu'))
+nn_model.add(Dropout(0.3))
+nn_model.add(Dense(64, activation='relu'))
+nn_model.add(Dense(1))
+nn_model.compile(optimizer='adam', loss='mse')
+nn_model.fit(X_train_scaled, y_train, epochs=50, batch_size=32, verbose=0)
+nn_preds = nn_model.predict(X_test_scaled).flatten()
+
+# 9. Evaluate Models
+def evaluate_model(name, y_true, y_pred):
+    print(f"{name} - RMSE: {np.sqrt(mean_squared_error(y_true, y_pred)):.4f}, R2: {r2_score(y_true, y_pred):.4f}")
+
+evaluate_model("Random Forest", y_test, rf_preds)
+evaluate_model("XGBoost", y_test, xgb_preds)
+evaluate_model("LightGBM", y_test, lgb_preds)
+evaluate_model("Neural Network", y_test, nn_preds)
+
+# 10. Optional: Visualize Predictions
+plt.figure(figsize=(10, 5))
+plt.plot(y_test.values[:100], label='Actual')
+plt.plot(rf_preds[:100], label='RF Predicted')
+plt.plot(xgb_preds[:100], label='XGB Predicted')
+plt.legend()
+plt.title("Air Quality (CO) Predictions - Sample")
+plt.xlabel("Time Steps")
+plt.ylabel("CO(GT)")
+plt.show()
